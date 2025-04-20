@@ -1,0 +1,103 @@
+# Raport z działalności firmy TTex
+
+```{r load-libs,message=FALSE}
+library( digest )
+library( readxl )
+library( dplyr )
+library( here )
+```
+
+```{r ensure_unique}
+files <- list.files( here( "AnalizaDanych/dane" ),pattern = "\\.xlsx$", full.names = TRUE )
+
+car_hashes <- c()
+employee_hashes <- c()
+
+for ( file in files ) {
+  cars <- read_excel( file, sheet = "Car" )         
+  employees <- read_excel( file, sheet = "Employee" )   
+  
+  cars <- arrange_all(cars)
+  employees <- arrange_all(employees)
+  
+  car_hashes <- c( car_hashes, digest(cars) )
+  employee_hashes <- c( employee_hashes, digest(employees) )
+}
+print( length( unique(car_hashes) ) )
+print( length( unique(employee_hashes) ) )
+```
+
+Powyższy kod udowadnia że dane w arkuszach Car i Employee są identyczne dla wszystkich plików .xlsx
+
+```{r load-trips}
+cars <- read_excel( here( "AnalizaDanych","dane","TTex_2023_t01.xlsx" ), sheet = "Car" )         
+employees <- read_excel( here( "AnalizaDanych","dane","TTex_2023_t01.xlsx" ), sheet = "Employee" )   
+trips <- data.frame()
+trips_with_employees <- data.frame()    
+trips_with_cars <- data.frame()
+for ( file in files ) {
+    trips <- read_excel( file, sheet = "Trip" )   
+    trips_with_employees <- rbind( trips_with_employees,left_join( trips, employees, by = c("employee" = "id") ) )
+    trips_with_cars <- rbind( trips_with_cars,left_join( trips, cars, by = c("car" = "id") ) )
+}
+```
+
+Powyższy kod łączy wszystkie 12 tablic w jedną
+
+```{r sus-1}
+trips_with_employees$start <- as.Date(trips_with_employees$start, "%m/%d/%Y")
+trips_with_employees$employment_end_date <- as.Date(trips_with_employees$employment_end_date, "%m/%d/%Y")
+
+suspicious_1 <- trips_with_employees %>%
+  filter(!is.na(employment_end_date) & start > employment_end_date)
+```
+
+Powyższy kod sprawdza czy pracownicy wykonywali przejazdy po tym jak zostali zwolnieni
+Jednakże nie znaleziono takich pracowników
+
+```{r sus-2}
+trips_with_cars$start <- as.Date(trips_with_cars$start, "%m/%d/%Y")
+trips_with_cars$active_from <- as.Date(trips_with_cars$active_from, "%m/%d/%Y")
+trips_with_cars$active_to <- as.Date(trips_with_cars$active_to, "%m/%d/%Y")
+
+suspicious_2 <- trips_with_cars %>%
+  filter(start < active_from | start > active_to)
+```
+
+Powyższy kod sprawdza czy pracownicy wykonywali przejazdy nieaktywnymi samochodami
+Jednakże nie znaleziono takich pracowników
+
+```{r sus-3}
+trips$fuel_per_100km <- (trips$fuel / trips$distance) * 100
+
+trips$start <- as.Date(trips$start)  
+trips$end <- as.Date(trips$end)
+
+suspicious_3 <- trips %>%
+  filter(fuel_per_100km < 3 | fuel_per_100km > 20)
+
+suspicious_3 <- suspicious_3 %>%
+  select(-from, -to)
+
+print(suspicious_3)
+```
+
+Powyższy kod sprawdza czy pracownicy nie przekraczają pewnych progów zużycia paliwa (na 100km)
+Jest kilka (~10) takich przejazdów (Niektóre przejazdy przekraczają 30l/100km) 
+```{r sus-4,warning=FALSE}
+daily_dist <- trips %>%
+  group_by("employee","start") %>%
+  summarise(total_distance = sum(trips$distance))
+
+suspicious_4 <- daily_dist %>%
+  filter(total_distance > 1000)
+```
+Powyższy kod sprawdza czy pracownicy nie wykonują zbyt długich tras
+Pracownik Roksana Czachor przejechała > 1100 km w dniach 03-22 oraz 03-23
+
+```{r sus-5}
+suspicious_5 <- trips %>%
+  filter("from" == "to")
+```
+
+Powyższy kod sprawdza czy pracownicy nie wykonują przejazdów w pętli 
