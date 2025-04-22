@@ -6,7 +6,7 @@ from sklearn.metrics import accuracy_score, classification_report
 from sklearn.tree import DecisionTreeClassifier
 
 # Zbiór danych https://www.kaggle.com/datasets/marslinoedward/sms-spam-dataset
-df = pd.read_csv('SI/spam.csv', encoding='latin-1')
+df = pd.read_csv('SI/spam.csv')
 df.columns = ['id','label', 'message']
 df.head()
 
@@ -22,12 +22,12 @@ nb_model = MultinomialNB()
 nb_model.fit(X_train, y_train)
 nb_preds = nb_model.predict(X_test)
 
-print("Naiwny Bayes - Accuracy:", accuracy_score(y_test, nb_preds))
+print("Naiwny Bayes - Celność:", accuracy_score(y_test, nb_preds))
 print(classification_report(y_test, nb_preds))
 
 tree_model = DecisionTreeClassifier()
 tree_model.fit(X_train, y_train)
 tree_preds = tree_model.predict(X_test)
 
-print("Drzewo decyzyjne - Accuracy:", accuracy_score(y_test, tree_preds))
+print("Drzewo decyzyjne - Celność:", accuracy_score(y_test, tree_preds))
 print(classification_report(y_test, tree_preds))
